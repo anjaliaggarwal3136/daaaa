@@ -1,143 +1,93 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog, scrolledtext
-import datetime
+from tkinter import messagebox, simpledialog
+import networkx as nx
+import matplotlib.pyplot as plt
+import heapq
 
-class Song:
-    def __init__(self, title, artist, genre, duration, release_year):
-        self.title = title
-        self.artist = artist
-        self.genre = genre
-        self.duration = duration
-        self.release_year = int(release_year)  # Store as integer for proper sorting
-
-class PlaylistApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Personalized Playlist Manager")
-        self.playlist = []
-        # Pre-fill the playlist with some Bollywood songs
-        self.populate_initial_playlist()
-        # Create GUI elements
-        self.create_widgets()
-
-    def populate_initial_playlist(self):
-        self.playlist.append(Song("Tum Hi Ho", "Arijit Singh", "Romantic", "4:22", 2013))
-        self.playlist.append(Song("Tera Ban Jaunga", "Akhil Sachdeva & Tulsi Kumar", "Romantic", "3:56", 2019))
-        self.playlist.append(Song("Kala Chashma", "Badshah & Neha Kakkar", "Party", "3:06", 2016))
-        self.playlist.append(Song("Channa Mereya", "Arijit Singh", "Romantic", "5:24", 2016))
-        self.playlist.append(Song("Kabira", "Amit Trivedi", "Romantic", "4:18", 2013))
-
-    def create_widgets(self):
-        self.add_button = tk.Button(self.root, text="Add Song", command=self.add_song)
-        self.add_button.pack(pady=10)
-
-        self.show_button = tk.Button(self.root, text="Show Playlist", command=self.show_playlist)
-        self.show_button.pack(pady=10)
-
-        self.sort_button = tk.Button(self.root, text="Sort Playlist", command=self.sort_playlist)
-        self.sort_button.pack(pady=10)
-
-        self.save_button = tk.Button(self.root, text="Save Playlist", command=self.save_playlist)
-        self.save_button.pack(pady=10)
-
-        self.display_area = scrolledtext.ScrolledText(self.root, width=50, height=15, wrap=tk.WORD)
-        self.display_area.pack(pady=10)
-
-    def add_song(self):
-        title = simpledialog.askstring("Input", "Enter the song title:")
-        artist = simpledialog.askstring("Input", "Enter the artist(s):")
-        genre = simpledialog.askstring("Input", "Enter the genre:")
-        duration = simpledialog.askstring("Input", "Enter the duration (mm:ss):")
-        release_year = simpledialog.askstring("Input", "Enter the release year:")
-
-        if self.validate_inputs(title, artist, genre, duration, release_year):
-            self.playlist.append(Song(title, artist, genre, duration, int(release_year)))
-            messagebox.showinfo("Success", f"Added '{title}' to the playlist.")
-        else:
-            messagebox.showerror("Error", "Invalid input. Please try again.")
-
-    def validate_inputs(self, title, artist, genre, duration, release_year):
-        if not title or not artist or not genre or not duration or not release_year:
-            return False
+def dijkstra(graph, start):
+    distances = {node: float('inf') for node in graph}
+    distances[start] = 0
+    priority_queue = [(0, start)]
+    
+    while priority_queue:
+        current_distance, current_node = heapq.heappop(priority_queue)
         
-        parts = duration.split(":")
-        if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
-            return False
+        if current_distance > distances[current_node]:
+            continue
         
-        try:
-            year = int(release_year)
-            if year < 0 or year > datetime.datetime.now().year:
-                return False
-        except ValueError:
-            return False
-        
-        return True
+        for neighbor, weight in graph[current_node].items():
+            distance = current_distance + weight
+            
+            if distance < distances[neighbor]:
+                distances[neighbor] = distance
+                heapq.heappush(priority_queue, (distance, neighbor))
+    
+    return distances
 
-    def show_playlist(self):
-        self.display_area.delete(1.0, tk.END)
-        if not self.playlist:
-            self.display_area.insert(tk.END, "Playlist is empty.")
-            return
+def visualize_graph(graph, start, shortest_paths):
+    G = nx.Graph()
+    
+    for node in graph:
+        for neighbor, weight in graph[node].items():
+            G.add_edge(node, neighbor, weight=weight)
+    
+    pos = nx.spring_layout(G)
+    labels = nx.get_edge_attributes(G, 'weight')
+    
+    plt.figure(figsize=(6, 4))
+    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=2000, edge_color='gray', font_size=10)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
+    
+    # Highlight the shortest path from start node
+    for node in shortest_paths:
+        nx.draw_networkx_nodes(G, pos, nodelist=[node], node_color='red', node_size=2000)
+    
+    plt.title(f"Shortest Paths from {start}")
+    plt.show()
 
-        self.display_area.insert(tk.END, "Your Playlist:\n")
-        self.display_area.insert(tk.END, "-" * 50 + "\n")
+def process_input():
+    user_input = entry.get()
+    edges = user_input.split(',')
+    graph = {}
+    
+    try:
+        for edge in edges:
+            node1, node2, weight = edge.strip().split()
+            weight = int(weight)
+            if node1 not in graph:
+                graph[node1] = {}
+            if node2 not in graph:
+                graph[node2] = {}
+            graph[node1][node2] = weight
+            graph[node2][node1] = weight
+    except ValueError:
+        messagebox.showerror("Error", "Invalid input format! Use format: A B 10, B C 5")
+        return
+    
+    start_node = simpledialog.askstring("Input", "Enter the starting node:")
+    if start_node not in graph:
+        messagebox.showerror("Error", "Invalid starting node!")
+        return
+    
+    result = dijkstra(graph, start_node)
+    result_text.set(f"Shortest paths from {start_node}:\n" + "\n".join([f"{key}: {value}" for key, value in result.items()]))
+    visualize_graph(graph, start_node, result.keys())
 
-        for song in self.playlist:
-            self.display_area.insert(tk.END, f"{song.title} - {song.artist} ({song.genre}) [{song.duration}] ({song.release_year})\n")
-            self.display_area.insert(tk.END, "-" * 50 + "\n")
-
-    def sort_playlist(self):
-        if not self.playlist:
-            messagebox.showwarning("Warning", "Playlist is empty. Add songs before sorting.")
-            return
-
-        sort_options = {
-            '1': ('title', 'Title'),
-            '2': ('artist', 'Artist'),
-            '3': ('genre', 'Genre'),
-            '4': ('duration', 'Duration'),
-            '5': ('release_year', 'Release Year')
-        }
-
-        options_message = "\n".join([f"{key}: Sort by {value[1]}" for key, value in sort_options.items()])
-        sort_key_choice = simpledialog.askstring("Input", f"Choose attribute to sort by:\n{options_message}\nEnter number:")
-
-        if sort_key_choice not in sort_options:
-            messagebox.showerror("Error", "Invalid choice. Please enter a valid number.")
-            return
-
-        order_choice = simpledialog.askstring("Input", "Enter 1 for Ascending or 2 for Descending:").strip()
-
-        if order_choice not in ['1', '2']:
-            messagebox.showerror("Error", "Invalid choice. Please enter 1 or 2.")
-            return
-
-        ascending = order_choice == '1'
-
-        key_attribute = sort_options[sort_key_choice][0]
-        if key_attribute == 'release_year':  
-            self.playlist.sort(key=lambda song: int(getattr(song, key_attribute)), reverse=(not ascending))
-        else:
-            self.playlist.sort(key=lambda song: getattr(song, key_attribute), reverse=(not ascending))
-
-        order_text = 'ascending' if ascending else 'descending'
-        messagebox.showinfo("Success", f"Playlist sorted by {sort_options[sort_key_choice][1]} in {order_text} order.")
-
-    def save_playlist(self):
-        filename = simpledialog.askstring("Input", "Enter filename to save the playlist:")
-        if not filename:
-            messagebox.showerror("Error", "Filename cannot be empty.")
-            return
-
-        try:
-            with open(filename, 'w') as f:
-                for song in self.playlist:
-                    f.write(f"{song.title} - {song.artist} ({song.genre}) [{song.duration}] ({song.release_year})\n")
-            messagebox.showinfo("Success", f"Playlist saved as '{filename}'.")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save playlist: {str(e)}")
-
-if __name__ == "__main__":
+def create_gui():
+    global entry, result_text
     root = tk.Tk()
-    app = PlaylistApp(root)
+    root.title("Traffic Flow Optimization - Dijkstra")
+    
+    tk.Label(root, text="Enter roads (format: A B 10, B C 5, ...):").pack()
+    entry = tk.Entry(root, width=50)
+    entry.pack()
+    
+    tk.Button(root, text="Run Optimization", command=process_input).pack()
+    
+    result_text = tk.StringVar()
+    tk.Label(root, textvariable=result_text, wraplength=400).pack()
+    
     root.mainloop()
+
+if _name_ == "_main_":
+    create_gui()
